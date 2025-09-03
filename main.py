@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import tensorflow as tf
 from PIL import Image
 import numpy as np
@@ -10,7 +10,11 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 import gdown  # for downloading the model
 
-app = FastAPI()
+app = FastAPI(
+    title="Cervical Cancer Detection API",
+    description="🚀 AI-powered API for cervical cancer detection and PDF report generation",
+    version="1.0.0"
+)
 
 # Enable CORS
 app.add_middleware(
@@ -25,7 +29,6 @@ app.add_middleware(
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "../model")
 MODEL_PATH = os.path.join(MODEL_DIR, "cnn_model.h5")
 
-# Create model folder if not exists
 os.makedirs(MODEL_DIR, exist_ok=True)
 
 # Download model if missing
@@ -59,13 +62,22 @@ category_map = {
     "im_Superficial-Intermediate": "Normal"
 }
 
+# ---------------- Root & Health Routes ----------------
+@app.get("/")
+async def root():
+    return {"message": "✅ Cervical Cancer Detection API is running. Use /predict or /generate-report."}
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "model_loaded": model is not None}
+
 # ---------------- Prediction Endpoint ----------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     if model is None:
         return {"error": "Model not loaded. Please check model file."}
     try:
-        img = Image.open(file.file).resize((224, 224))
+        img = Image.open(file.file).convert("RGB").resize((224, 224))
         arr = np.expand_dims(np.array(img)/255.0, axis=0)
         preds = model.predict(arr)[0]
         result = dict(zip(classes, preds.tolist()))
