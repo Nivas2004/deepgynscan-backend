@@ -66,16 +66,27 @@ async def predict(file: UploadFile = File(...)):
         return {"error": "Model not loaded. Please check model file."}
     try:
         img = Image.open(file.file).resize((224, 224))
-        arr = np.expand_dims(np.array(img)/255.0, axis=0)
+        arr = np.expand_dims(np.array(img) / 255.0, axis=0)
         preds = model.predict(arr)[0]
+
         result = dict(zip(classes, preds.tolist()))
         predicted_class = classes[np.argmax(preds)]
         predicted_category = category_map[predicted_class]
 
+        # Add mapped details
+        mapped_details = {
+            cls: {
+                "category": category_map.get(cls, "Unknown"),
+                "confidence": float(score)
+            }
+            for cls, score in result.items()
+        }
+
         return {
             "prediction": predicted_category,
             "confidence": float(np.max(preds)),
-            "details": result
+            "details": result,
+            "mapped_details": mapped_details
         }
     except Exception as e:
         return {"error": f"Prediction failed: {str(e)}"}
