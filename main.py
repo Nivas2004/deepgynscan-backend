@@ -5,16 +5,16 @@ from PIL import Image
 import tensorflow as tf
 from fastapi import FastAPI, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-app = FastAPI()
+app = FastAPI(title="DeepGynScan API")
 
-# Enable CORS
+# ---------------- CORS Setup ----------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace with frontend URL in production
+    allow_origins=["*"],  # ⚠️ Change to frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,13 +28,15 @@ MODEL_PATH = os.path.join(MODEL_DIR, "cnn_model.h5")
 
 print("🔍 Looking for model at:", MODEL_PATH)
 
-# Load model
-try:
-    model = tf.keras.models.load_model(MODEL_PATH)
-    print(f"✅ Model loaded from {MODEL_PATH}")
-except Exception as e:
-    print(f"❌ Failed to load model: {e}")
-    model = None
+model = None
+if os.path.exists(MODEL_PATH):
+    try:
+        model = tf.keras.models.load_model(MODEL_PATH)
+        print(f"✅ Model loaded from {MODEL_PATH}")
+    except Exception as e:
+        print(f"❌ Failed to load model: {e}")
+else:
+    print("❌ Model file not found! Please ensure cnn_model.h5 is in /model")
 
 # ---------------- Classes ----------------
 classes = [
@@ -42,7 +44,7 @@ classes = [
     "im_Koilocytotic",
     "im_Metaplastic",
     "im_Parabasal",
-    "im_Superficial-Intermediate"
+    "im_Superficial-Intermediate",
 ]
 
 category_map = {
@@ -50,17 +52,19 @@ category_map = {
     "im_Koilocytotic": "Pre-cancerous",
     "im_Metaplastic": "Pre-cancerous",
     "im_Parabasal": "Normal",
-    "im_Superficial-Intermediate": "Normal"
+    "im_Superficial-Intermediate": "Normal",
 }
 
 # ---------------- Prediction Endpoint ----------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     if model is None:
-        return {"error": "Model not loaded. Please check model file."}
+        return JSONResponse(status_code=500, content={"error": "Model not loaded"})
+
     try:
-        img = Image.open(file.file).resize((224, 224))
+        img = Image.open(file.file).convert("RGB").resize((224, 224))
         arr = np.expand_dims(np.array(img) / 255.0, axis=0)
+
         preds = model.predict(arr)[0]
         result = dict(zip(classes, preds.tolist()))
         predicted_class = classes[np.argmax(preds)]
@@ -69,10 +73,10 @@ async def predict(file: UploadFile = File(...)):
         return {
             "prediction": predicted_category,
             "confidence": float(np.max(preds)),
-            "details": result
+            "details": result,
         }
     except Exception as e:
-        return {"error": f"Prediction failed: {str(e)}"}
+        return JSONResponse(status_code=500, content={"error": f"Prediction failed: {str(e)}"})
 
 # ---------------- Report Generation Endpoint ----------------
 @app.post("/generate-report")
@@ -82,7 +86,7 @@ async def generate_report(
     details: dict = Body(...),
     patientName: str = Body(...),
     patientAge: int = Body(...),
-    patientLocation: str = Body(...)
+    patientLocation: str = Body(...),
 ):
     try:
         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
@@ -118,7 +122,7 @@ async def generate_report(
         c.drawString(60, y, "Class")
         c.drawString(250, y, "Category")
         c.drawString(400, y, "Confidence")
-        c.line(50, y-2, 500, y-2)
+        c.line(50, y - 2, 500, y - 2)
         y -= 20
         c.setFont("Helvetica", 12)
         for cls, score in details.items():
@@ -138,4 +142,9 @@ async def generate_report(
 
         return FileResponse(temp_file.name, filename="Cancer_Report.pdf", media_type="application/pdf")
     except Exception as e:
-        return {"error": f"Report generation failed: {str(e)}"}
+        return JSONResponse(status_code=500, content={"error": f"Report generation failed: {str(e)}"})
+
+# ---------------- Health Check ----------------
+@app.get("/")
+def root():
+    return {"message": "DeepGynScan API is running 🚀"}
