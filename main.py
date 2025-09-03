@@ -1,20 +1,15 @@
-from fastapi import FastAPI, UploadFile, File, Body
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-import tensorflow as tf
-from PIL import Image
-import numpy as np
 import os
 import tempfile
+import numpy as np
+from PIL import Image
+import tensorflow as tf
+from fastapi import FastAPI, UploadFile, File, Body
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-import gdown  # for downloading the model
 
-app = FastAPI(
-    title="Cervical Cancer Detection API",
-    description="🚀 AI-powered API for cervical cancer detection and PDF report generation",
-    version="1.0.0"
-)
+app = FastAPI()
 
 # Enable CORS
 app.add_middleware(
@@ -26,16 +21,12 @@ app.add_middleware(
 )
 
 # ---------------- Model Setup ----------------
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "../model")
+BASE_DIR = os.path.dirname(__file__)          # backend/
+ROOT_DIR = os.path.dirname(BASE_DIR)          # deepgynscan/
+MODEL_DIR = os.path.join(ROOT_DIR, "model")   # deepgynscan/model/
 MODEL_PATH = os.path.join(MODEL_DIR, "cnn_model.h5")
 
-os.makedirs(MODEL_DIR, exist_ok=True)
-
-# Download model if missing
-if not os.path.exists(MODEL_PATH):
-    print("📥 Model not found. Downloading...")
-    url = "https://drive.google.com/uc?id=1L84L6Wiy9_SCLjgdPvnBgoQH8VRCsG4v"  # <-- replace with your Google Drive file ID
-    gdown.download(url, MODEL_PATH, quiet=False)
+print("🔍 Looking for model at:", MODEL_PATH)
 
 # Load model
 try:
@@ -62,23 +53,14 @@ category_map = {
     "im_Superficial-Intermediate": "Normal"
 }
 
-# ---------------- Root & Health Routes ----------------
-@app.get("/")
-async def root():
-    return {"message": "✅ Cervical Cancer Detection API is running. Use /predict or /generate-report."}
-
-@app.get("/health")
-async def health():
-    return {"status": "ok", "model_loaded": model is not None}
-
 # ---------------- Prediction Endpoint ----------------
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     if model is None:
         return {"error": "Model not loaded. Please check model file."}
     try:
-        img = Image.open(file.file).convert("RGB").resize((224, 224))
-        arr = np.expand_dims(np.array(img)/255.0, axis=0)
+        img = Image.open(file.file).resize((224, 224))
+        arr = np.expand_dims(np.array(img) / 255.0, axis=0)
         preds = model.predict(arr)[0]
         result = dict(zip(classes, preds.tolist()))
         predicted_class = classes[np.argmax(preds)]
