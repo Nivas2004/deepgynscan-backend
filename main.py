@@ -14,16 +14,15 @@ app = FastAPI(title="DeepGynScan API")
 # ---------------- CORS Setup ----------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ⚠️ Change to frontend domain in production
+    allow_origins=["*"],  # ⚠️ change to your frontend domain in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------------- Model Setup ----------------
-BASE_DIR = os.path.dirname(__file__)          # backend/
-ROOT_DIR = os.path.dirname(BASE_DIR)          # deepgynscan/
-MODEL_DIR = os.path.join(ROOT_DIR, "model")   # deepgynscan/model/
+ROOT_DIR = os.getcwd()                        # Render working dir → /opt/render/project/src
+MODEL_DIR = os.path.join(ROOT_DIR, "model")   # /opt/render/project/src/model
 MODEL_PATH = os.path.join(MODEL_DIR, "cnn_model.h5")
 
 print("🔍 Looking for model at:", MODEL_PATH)
